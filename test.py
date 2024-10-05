@@ -135,13 +135,68 @@ def generate_key_shares(t, num_shares, threshold):
 
 
 def sign_partial(s, message, a):
+    # 一个基于多项式运算和随机数生成的部分签名过程
+    # s: 一个多项式，通常表示私钥或某个秘密值。
+    # message: 消息，虽然在此代码段中并未直接使用，但在实际应用中通常会参与计算或以某种方式影响签名过程。
+    # a: 一个多项式，通常与公钥或公开参数相关。
     y = np.random.randint(-2 ** d, 2 ** d, size=n, dtype=np.int32)
+    # 生成一个大小为n的整数数组y，其中每个元素随机选取在-2^d到2^d - 1之间（包含边界）
+    # d，n定义了多项式的维度和系数的范围
     w = mod_q(ntt(poly_mul_mod(a, y)))
+    # 计算多项式a和y的乘积，应用数论变换，对结果进行模q运算，结果存储在w中，它将是后续计算的一个中间值
     c = np.random.choice([-1, 0, 1], size=n, p=[1 / (2 * tau), 1 - 1 / tau, 1 / (2 * tau)])
+    # 生成一个大小为n的数组c，其中每个元素是-1、0或1，按照给定的概率分布选择：-1和1的概率各为1 / (2 * tau)，0的概率为1 - 1 / tau
     z = mod_q(y + poly_mul_mod(s, c))
+    # 结果z是部分签名的一个重要组成部分
     return z, c
 
-# new
+
+def combine_signatures(partial_sigs, indices, t):
+    # partial_sigs: 一个包含部分签名的列表，每个部分签名是一个多项式表示的数组。
+    # indices: 一个与partial_sigs对应的索引列表，用于拉格朗日插值。
+    # t: 一个目标值，通常表示要计算插值的点（在此上下文中可能是某个特定的值，如0，用于签名聚合）。
+    lambda_i = lagrange_interpolation(indices, 0, q)
+    # 调用lagrange_interpolation函数计算拉格朗日插值系数lambda_i。
+    z = np.zeros(n, dtype=np.int32)
+    # 初始化一个全零数组z作为最终的签名结果。
+    for (i, partial_z), l in zip(partial_sigs, lambda_i):
+        z = mod_q(z + l * partial_z)
+    # 遍历partial_sigs和lambda_i，对每个部分签名和对应的插值系数，计算l * partial_z，并将结果累加到z上，同时对结果进行模q运算
+    return z
+    # 返回一个多项式表示的数组z，作为完整的签名
+
+
+def verify_signature(t, message, z, c, a):
+    # t: 一个值，通常与消息或签名方案中的某个参数相关。
+    # message: 消息本身，虽然在此函数实现中并未直接使用，但在实际应用中通常会参与验证过程。
+    # z: 签名，即combine_signatures函数的输出。
+    # c: 一个多项式，通常与签名生成过程中的随机数相关。
+    # a: 一个多项式，通常与公钥或公开参数相关。
+    w1 = mod_q(ntt(poly_mul_mod(a, z)))
+    # 签名z与多项式a的乘积的NTT（数论变换）结果，并对结果进行模q运算
+    w2 = mod_q(ntt(poly_mul_mod(t, c)))
+    # t与c的乘积的NTT结果，并对结果进行模q运算
+    return np.allclose(mod_q(w1 - w2), mod_q(ntt(poly_mul_mod(a, z) - poly_mul_mod(t, c))))
+    # 比较mod_q(w1 - w2)与mod_q(ntt(poly_mul_mod(a, z) - poly_mul_mod(t, c)))是否接近（使用np.allclose函数），以验证签名是否正确
+
+def lagrange_interpolation(indices, x, prime):
+    # 用于计算拉格朗日插值系数
+    # indices: 一个索引列表，用于指示插值点的位置。
+    # x: 一个值，表示要计算插值的点。
+    # prime: 一个大素数，用于模运算
+    result = []
+    for i in indices:
+        # 对于每个索引i，计算插值系数。这涉及遍历所有索引j（j != i），并计算分子和分母
+        numerator, denominator = 1, 1
+        for j in indices:
+            if i != j:
+                # 分子是(x - j)的连乘积，分母是(i - j)的连乘积，然后对分母取模prime的逆元
+                numerator = (numerator * (x - j)) % prime
+                denominator = (denominator * (i - j)) % prime
+        # 最后，将分子与分母的逆元相乘，并对结果取模prime
+        # 返回一个系数列表，用于拉格朗日插值
+        result.append((numerator * pow(denominator, -1, prime)) % prime)
+    return result
 
 value1, value2, value3, value4, value5 = generate_keypair()
 # print('\n__________________________________s________________________________________')
