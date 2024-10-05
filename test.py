@@ -265,7 +265,7 @@ shares = generate_key_shares(t, num_shares, threshold)                          
 # Signing
 message = "Hello, threshold signature!"                                                  # 要加密的消息
 partial_sigs = []                                                                        # 储存秘密份额和签名的数组
-for i in range(threshold):                                                               # 循环输出部分签名
+for i in range(threshold + 1):                                                               # 循环输出部分签名
     z, c = sign_partial(shares[i][1], message, a)                                        # 输出对应的签名和挑战值
     partial_sigs.append((shares[i][0], z))                                               # 存入数组
 
