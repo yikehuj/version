@@ -1,18 +1,30 @@
 import numpy as np
 from numpy.polynomial import polynomial as poly
 
-# Parameters 参数
-n = 256  # Lattice dimension 晶格维数
-q = 8380417  # Modulus 模量
+# 参数
+n = 256
+q = 8380417
 
 # 在 CRYSTALS-
 # Dilithium 数字签名方案中，模 q 和 n 的值是固定的，
 # 其中，n = 256，q = 223 - 213 + 1。
 
 
-d = 13  # Bit length of challenge
-tau = 60  # Number of +-1's in the challenge
-eta = 2  # Coefficient range for secret key 密钥系数范围
+d = 13
+tau = 60
+eta = 2
+
+
+def ntt(a):
+    # 数论变换（简化）
+    # 计算实输入的一维离散傅里叶变换。
+    return np.fft.rfft(a)
+
+
+def intt(a):
+    # 逆数论变换（简化）
+    # 计算rfft的逆。
+    return np.fft.irfft(a, n=n).real.astype(np.int32)
 
 
 def mod_q(x):
@@ -60,6 +72,10 @@ def poly_mul_mod(a, b):
 
 def generate_keypair():
     # 生成了一对多项式系数 s 和 a，并通过多项式乘法、添加噪声和模约简等操作计算了一系列相关的值
+
+    # 生成一个密钥对，包括秘密密钥s（一个小的多项式）和公钥a（一个随机的多项式），以及一个与秘密密钥相关的多项式t（通常是a和s的乘积加上一个小的误差项）。
+    # 公钥用于加密和验证签名，秘密密钥用于解密和生成签名。
+
     s = np.random.randint(-eta, eta + 1, size=n, dtype=np.int32)  # 一个长度为 n 的多项式系数数组，其元素随机选取在 [-eta, eta] 范围内的整数
     a = np.random.randint(0, q, size=n, dtype=np.int32)  # 一个长度为 n 的多项式系数数组，其元素随机选取在 [0, q-1] 范围内的整数
     ''' np.random.randint 是 NumPy 库中的一个函数，用于生成随机整数.
@@ -72,20 +88,22 @@ def generate_keypair():
     # 对应step 2：利用 SHAKE-256 算法和种子分别产生l 维向量 s1 和 k 维向量 s2，其中向量 s1 和 s2 中的每一个元素都是-η 到 η 中的随机数。
 
     # 调用 poly_mul_mod 函数计算多项式 a 和 s 的乘积，并对结果进行模 q 约简，得到 p_m_m
-    p_m_m = poly_mul_mod(a, s)
+    # p_m_m = poly_mul_mod(a, s)
     # 在 p_m_m 的基础上添加一个随机噪声，噪声的每个元素也是随机选取在 [-eta, eta] 范围内的整数。
     '''poly_mul_mod(a, s):这是一个假设存在的函数，用于执行多项式乘法。它会对数组 a 和 s 进行多项式乘法计算。结果是一个多项式的系数数组，通常是一个新的数组。'''
-    p_m_m_1 = p_m_m + np.random.randint(-eta, eta + 1, size=n, dtype=np.int32)
+    # p_m_m_1 = p_m_m + np.random.randint(-eta, eta + 1, size=n, dtype=np.int32)
     # 对添加噪声后的结果 p_m_m_1 进行模 q 约简，得到 m_q
-    m_q = mod_q(p_m_m_1)
-    t = m_q
+    # m_q = mod_q(p_m_m_1)
+    # t = m_q
 
-    # t = mod_q(poly_mul_mod(a, s) + np.random.randint(-eta, eta + 1, size=n, dtype=np.int32))
+    t = mod_q(poly_mul_mod(a, s) + np.random.randint(-eta, eta + 1, size=n, dtype=np.int32))
+
     '''mod_q(...):这是另一个假设存在的函数，通常用于执行模运算。它将输入值进行模 q 运算，确保结果在某个特定的范围内，通常是 [0, q-1]。
     这一步是为了将结果限制在特定的数值范围，常见于密码学或编码理论中。'''
     # 对应Step 3:计算向量 t = As1 + s2
 
-    return s, a, p_m_m, p_m_m_1, m_q
+    return (s, a), t
+    # return s, a, p_m_m, p_m_m_1, m_q
 
 
 def generate_key_shares(t, num_shares, threshold):
@@ -179,6 +197,7 @@ def verify_signature(t, message, z, c, a):
     return np.allclose(mod_q(w1 - w2), mod_q(ntt(poly_mul_mod(a, z) - poly_mul_mod(t, c))))
     # 比较mod_q(w1 - w2)与mod_q(ntt(poly_mul_mod(a, z) - poly_mul_mod(t, c)))是否接近（使用np.allclose函数），以验证签名是否正确
 
+
 def lagrange_interpolation(indices, x, prime):
     # 用于计算拉格朗日插值系数
     # indices: 一个索引列表，用于指示插值点的位置。
@@ -198,15 +217,27 @@ def lagrange_interpolation(indices, x, prime):
         result.append((numerator * pow(denominator, -1, prime)) % prime)
     return result
 
-value1, value2, value3, value4, value5 = generate_keypair()
-# print('\n__________________________________s________________________________________')
-# print(value1)
-# print('\n__________________________________a________________________________________')
-# print(value2)
-# print('\n__________________________________p_m_m____________________________________')
-# print(value3)
-# print('\n__________________________________p_m_m_1__________________________________')
-# print(value4)
-# print('\n__________________________________m_q______________________________________')
-# print(value5)
 
+# Example usage
+threshold = 3
+num_shares = 5
+
+# Key generation
+(s, a), t = generate_keypair()
+shares = generate_key_shares(t, num_shares, threshold)
+
+# Signing
+message = "Hello, threshold signature!"
+partial_sigs = []
+for i in range(threshold):
+    z, c = sign_partial(shares[i][1], message, a)
+    partial_sigs.append((shares[i][0], z))
+
+# Combining signatures
+indices = [share[0] for share in shares[:threshold]]
+combined_z = combine_signatures(partial_sigs, indices, t)
+
+# Verification
+is_valid = verify_signature(t, message, combined_z, c, a)
+
+print("Is the signature valid?", is_valid)
