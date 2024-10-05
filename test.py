@@ -107,16 +107,21 @@ def generate_keypair():
 
 
 def generate_key_shares(t, num_shares, threshold):
-    # 一个多项式 t（其常数项是要共享的秘密），生成 num_shares 个密钥份额，每个份额都与一个唯一的标识符 i 相关联。
-    # 这些份额是根据门限秘密共享方案生成的，其中 threshold 是重构秘密所需的最小份额数。
-    # 只有当收集到至少 threshold 个份额时，才能使用拉格朗日插值法或其他方法重构出原始秘密。
+    # 使用Shamir的秘密共享方案，将一个多项式形式的秘密t分割成多个份额，并返回这些份额的列表。
+    # 每个份额都是通过对一个多项式在某个点上的值进行计算并取模得到的。
+    # 只有当收集到足够的份额（至少threshold个）时，才能通过拉格朗日插值等方法重构出原始的秘密多项式。
+
+    # t：这是一个整数数组，表示要共享的秘密（它是一个多项式形式的秘密）。
+    # num_shares：整数，表示要生成的秘密份额的总数。
+    # threshold：整数，表示重构秘密所需的最小份额数（也即门限值）。
 
     coeffs = np.random.randint(0, q, size=(threshold - 1, n), dtype=np.int32)
     coeffs = np.vstack([t, coeffs])
 
-    # 初始化系数矩阵
-    # 首先，生成一个大小为 (threshold - 1) x n 的随机整数矩阵 coeffs，其元素在 [0, q-1] 范围内。
-    # 然后，将多项式 t（一个长度为 n 的数组）作为第一行添加到 coeffs 矩阵的顶部，形成一个新的矩阵。现在，coeffs 的第一行是 t，其余行是随机生成的系数。
+    # 生成一个(threshold-1) x n的随机整数矩阵coeffs，其中每个元素都在[0, q-1]范围内。
+    # 这里q是一个预定义的大素数，用于模运算以保证数值不会太大。n是多项式的阶数，也即秘密和份额多项式的最高次项的次数加一
+    # 使用np.vstack([t, coeffs])将秘密t和随机生成的系数矩阵coeffs垂直堆叠，形成一个threshold x n的矩阵。
+    # 这里的coeffs实际上是多项式的系数，其中t是常数项（秘密的多项式表示中的最低次项系数）
     '''np.vstack:这个函数用于垂直堆叠数组。它将多个数组沿着垂直方向（行的方向）组合在一起。结果赋值：将堆叠后的结果赋值回 coeffs 变量。
     例:
     import numpy as np
@@ -132,90 +137,115 @@ def generate_key_shares(t, num_shares, threshold):
      [3]]
     这代表 t 成为了新数组的第一行，而原来的 coeffs 成为了后面的行.'''
 
-    # 对应Step 1：生 成 系 数 小 于 γ1 的 多 项 式 y 的 屏 蔽 向量(masking vector)，参 数 γ1 需 要 设 置 在 一 定 范 围 内
-    # 使得最终签名不会泄露密钥(即签名算法是零知识的)，且使得签名不容易被伪造。
-
     shares = []
-    # 生成密钥份额
+    # 为每个参与者生成一个秘密份额
     for i in range(1, num_shares + 1):
+        # 外层循环遍历从1到num_shares，为每个参与者生成一个唯一的标识符i（这里i实际上是参与者的ID或序号，从1开始）
         share = np.zeros(n, dtype=np.int32)
-        for j in range(threshold):  # 这里有一个嵌套循环，它从 0 到 threshold - 1 进行迭代
-            share = mod_q(share + coeffs[j] * (i ** j))  # coeffs[j] * (i ** j)：将当前的系数 coeffs[j] 和当前索引 i 的 j 次方相乘。
+        for j in range(threshold):
+            # 内层循环计算份额
+            share = mod_q(share + coeffs[j] * (i ** j))
+            # 对于每个i，计算多项式f(i)的值，其中f(x)是以coeffs为系数的多项式。
+            # 计算f(i)的过程是通过累加coeffs[j] * (i ** j)完成的，这里j从0到threshold-1，对应多项式的各项系数。
+            # 每次累加后都通过mod_q函数进行模q运算，以保持数值在[0, q-1]范围内
         shares.append((i, share))
-    # 初始化一个空列表 shares 来存储生成的密钥份额。
-    # 对于每个 i 从 1 到 num_shares（包括 num_shares），执行以下操作：
-    # 初始化一个长度为 n 的零数组 share。
-    # 对于每个 j 从 0 到 threshold - 1，计算 coeffs[j] * (i ** j)，并将结果加到 share 上。
-    # 注意，这里 coeffs[j] 是一个长度为 n 的数组，所以这个操作是逐元素进行的。
-    # 对 share 应用 mod_q 函数进行模约简，确保其结果在 [0, q-1] 范围内。
-    # 将 (i, share) 添加到 shares 列表中。这里 i 是份额的标识符（通常是参与者的标识或索引），share 是对应的密钥份额。
+        # 每个份额是一个元组(i, share)，其中i是参与者的标识符，share是计算得到的秘密份额（一个长度为n的整数数组）
     return shares
 
 
 def sign_partial(s, message, a):
+    # 阈值签名方案中的一个关键部分，它负责生成部分签名。通过结合多个部分签名，可以生成最终的签名，从而实现对消息的验证。
+
     # 一个基于多项式运算和随机数生成的部分签名过程
     # s: 一个多项式，通常表示私钥或某个秘密值。
     # message: 消息，虽然在此代码段中并未直接使用，但在实际应用中通常会参与计算或以某种方式影响签名过程。
     # a: 一个多项式，通常与公钥或公开参数相关。
     y = np.random.randint(-2 ** d, 2 ** d, size=n, dtype=np.int32)
-    # 生成一个大小为n的整数数组y，其中每个元素随机选取在-2^d到2^d - 1之间（包含边界）
-    # d，n定义了多项式的维度和系数的范围
+    # 这行代码生成一个长度为 n 的随机整数数组 y，其元素取值范围在 -2**d 到 2**d 之间（不包括 2**d）。
+    # 这个随机数组在后续的签名生成中起到掩蔽的作用。
+    # Step 1 生成系数小于γ1的多项式y的屏蔽向量(masking vector)，参数γ1需要设置在一定范围内
+    # 使得最终签名不会泄露密钥(即签名算法是零知识的)，且使得签名不容易被伪造。
     w = mod_q(ntt(poly_mul_mod(a, y)))
     # 计算多项式a和y的乘积，应用数论变换，对结果进行模q运算，结果存储在w中，它将是后续计算的一个中间值
+    # Step 2 计算 Ay，并使用 Decompose q ( · )算法得到 w 的高位比特 w1 和低位比特 w2，分解时使用的α = 2γ2
     c = np.random.choice([-1, 0, 1], size=n, p=[1 / (2 * tau), 1 - 1 / tau, 1 / (2 * tau)])
     # 生成一个大小为n的数组c，其中每个元素是-1、0或1，按照给定的概率分布选择：-1和1的概率各为1 / (2 * tau)，0的概率为1 - 1 / tau
+    # Step 3 使用哈希函数 H0 计算挑战值 c ∈ C，c 是Rq 中 的 多 项 式 ，系 数 c 0,c 1,⋯,c 255 ∈ {±1,0 }，其 中±1 的个数为 τ。
+    # 选择这种分布的原因是 c 具有小的范数，并且来自（拥有足够大的）熵 log 2 ( 256τ ) + τ 的挑战值空间。
     z = mod_q(y + poly_mul_mod(s, c))
-    # 结果z是部分签名的一个重要组成部分
+    # 这行代码计算部分签名 z。它首先将 y 和 s 与 c 的多项式乘积相加（使用 poly_mul_mod 函数计算 s 和 c 的乘积），然后对结果应用模 q 操作。
+    # z 是部分签名的结果，它将与其他部分签名一起用于生成最终的签名。
+    # Step 4 计算潜在的签名 z ≔ y + cs1，由于直接输出可能会导致密钥的泄露，因此使用拒绝采样[17]，参数 β 被设置为 cs1 的最大可能系数。
+    # 如果z的任何一项系数大于 γ1 - β，那么拒绝并重新开始签名过程 。
+    # 同样，如果Az-ct的任何低位比特的系数大于γ2 - β，则需要重新开始计算签名。
+
+    # z为潜在签名   c为挑战值
     return z, c
 
 
+def lagrange_interpolation(indices, x, prime):
+    # 用于计算拉格朗日插值系数
+    # indices: 一个包含用于插值的点的索引的列表。
+    # x: 要插值的点的x坐标值，通常在Shamir的秘密共享中为0，因为我们想要恢复的是多项式在x=0处的值（即秘密）。
+    # prime: 一个质数，用于模运算，以确保结果保持在一定的范围内。
+    result = []
+    # 初始化一个空列表result，用于存储每个索引对应的拉格朗日系数。
+    for i in indices:
+        # 对于indices中的每个索引i：
+        # 初始化分子numerator和分母denominator为1。
+        # 遍历indices中的每个索引j，如果j不等于i：
+        # 更新分子：numerator = (numerator * (x - j)) % prime，这里(x - j)是拉格朗日插值公式中的一个因子，% prime确保结果模prime。
+        # 更新分母：denominator = (denominator * (i - j)) % prime，这里(i - j)是另一个因子。
+        # 计算i对应的拉格朗日系数：(numerator * pow(denominator, -1, prime)) % prime，
+        # 其中pow(denominator, -1, prime)是计算denominator在模prime下的逆元。
+        # 将计算出的系数添加到result列表中。
+        # 对于每个索引i，计算插值系数。这涉及遍历所有索引j（j != i），并计算分子和分母
+        numerator, denominator = 1, 1
+        for j in indices:
+            if i != j:
+                numerator = (numerator * (x - j)) % prime
+                denominator = (denominator * (i - j)) % prime
+        # 返回一个系数列表，用于拉格朗日插值
+        result.append((numerator * pow(denominator, -1, prime)) % prime)
+    return result
+
+
 def combine_signatures(partial_sigs, indices, t):
+    # 这个函数是基于 Shamir 的秘密共享方案中的拉格朗日插值法来实现的
+
     # partial_sigs: 一个包含部分签名的列表，每个部分签名是一个多项式表示的数组。
     # indices: 一个与partial_sigs对应的索引列表，用于拉格朗日插值。
-    # t: 一个目标值，通常表示要计算插值的点（在此上下文中可能是某个特定的值，如0，用于签名聚合）。
+    # t: 公钥的一部分，通常是一个多项式，这里用于验证和计算。
     lambda_i = lagrange_interpolation(indices, 0, q)
     # 调用lagrange_interpolation函数计算拉格朗日插值系数lambda_i。
     z = np.zeros(n, dtype=np.int32)
     # 初始化一个全零数组z作为最终的签名结果。
     for (i, partial_z), l in zip(partial_sigs, lambda_i):
         z = mod_q(z + l * partial_z)
-    # 遍历partial_sigs和lambda_i，对每个部分签名和对应的插值系数，计算l * partial_z，并将结果累加到z上，同时对结果进行模q运算
+    # 同时对结果进行模q运算对于每一个部分签名 partial_z 和对应的系数 l，计算 l * partial_z，然后将结果累加到 z 上。
+    # 使用 mod_q 函数确保结果保持在模 q 的范围内。
     return z
     # 返回一个多项式表示的数组z，作为完整的签名
 
 
 def verify_signature(t, message, z, c, a):
-    # t: 一个值，通常与消息或签名方案中的某个参数相关。
-    # message: 消息本身，虽然在此函数实现中并未直接使用，但在实际应用中通常会参与验证过程。
-    # z: 签名，即combine_signatures函数的输出。
-    # c: 一个多项式，通常与签名生成过程中的随机数相关。
-    # a: 一个多项式，通常与公钥或公开参数相关。
+    # 通过比较两个多项式乘积的NTT结果来验证签名的有效性。如果这两个结果相等（或在允许的误差范围内相等），则签名被认为是有效的。
+
+    # t：公钥的一部分，通常是由私钥 s 和一个随机多项式 a 通过多项式乘法生成的。
+    # message：要签名的消息。在这个示例代码中，但在实际应用中，消息通常会影响挑战 c 的生成。
+    # z：组合后的签名。
+    # c：挑战多项式，用于生成签名。
+    # a：公钥的另一部分，一个随机多项式。
     w1 = mod_q(ntt(poly_mul_mod(a, z)))
-    # 签名z与多项式a的乘积的NTT（数论变换）结果，并对结果进行模q运算
+    # 这一步计算 a 和 z 的多项式乘积，然后应用数论变换（NTT）。mod_q 确保结果模 q。这个计算对应于验证方程中的一个部分，即检查 a * z 的NTT结果。
     w2 = mod_q(ntt(poly_mul_mod(t, c)))
-    # t与c的乘积的NTT结果，并对结果进行模q运算
+    # 这一步计算 t 和 c 的多项式乘积，并应用NTT。这对应于验证方程中的另一个部分，即检查 t * c 的NTT结果。
     return np.allclose(mod_q(w1 - w2), mod_q(ntt(poly_mul_mod(a, z) - poly_mul_mod(t, c))))
     # 比较mod_q(w1 - w2)与mod_q(ntt(poly_mul_mod(a, z) - poly_mul_mod(t, c)))是否接近（使用np.allclose函数），以验证签名是否正确
 
-
-def lagrange_interpolation(indices, x, prime):
-    # 用于计算拉格朗日插值系数
-    # indices: 一个索引列表，用于指示插值点的位置。
-    # x: 一个值，表示要计算插值的点。
-    # prime: 一个大素数，用于模运算
-    result = []
-    for i in indices:
-        # 对于每个索引i，计算插值系数。这涉及遍历所有索引j（j != i），并计算分子和分母
-        numerator, denominator = 1, 1
-        for j in indices:
-            if i != j:
-                # 分子是(x - j)的连乘积，分母是(i - j)的连乘积，然后对分母取模prime的逆元
-                numerator = (numerator * (x - j)) % prime
-                denominator = (denominator * (i - j)) % prime
-        # 最后，将分子与分母的逆元相乘，并对结果取模prime
-        # 返回一个系数列表，用于拉格朗日插值
-        result.append((numerator * pow(denominator, -1, prime)) % prime)
-    return result
+    # np.allclose 用于检查两个数组是否在给定的容差范围内相等。
+    # 在这里，由于我们处理的是整数运算（模 q），理论上应该使用精确相等比较。
+    # 但是，由于数值稳定性和实现细节，使用 np.allclose 可能是为了处理潜在的浮点数精度问题（尽管在这个特定场景中，所有运算都是整数运算）。
 
 
 # Example usage
@@ -223,21 +253,28 @@ threshold = 3
 num_shares = 5
 
 # Key generation
-(s, a), t = generate_keypair()
-shares = generate_key_shares(t, num_shares, threshold)
+(s, a), t = generate_keypair()                                                           # 生成一个密钥对，包括秘密密钥s（一个小的多项式）和公钥a（一个随机的多项式），# 以及一个与秘密密钥相关的多项式t（通常是a和s的乘积加上一个小的误差项）。
+# 密钥s（一个小的多项式）和公钥a（一个随机的多项式），以及一个与秘密密钥相关的多项式t
+shares = generate_key_shares(t, num_shares, threshold)                                   # 输入t，参与人数，门限值，输出秘密份额
+
+# for k in range(num_shares):
+#     print(shares[k])
+# 查看秘密份额
+
 
 # Signing
-message = "Hello, threshold signature!"
-partial_sigs = []
-for i in range(threshold):
-    z, c = sign_partial(shares[i][1], message, a)
-    partial_sigs.append((shares[i][0], z))
+message = "Hello, threshold signature!"                                                  # 要加密的消息
+partial_sigs = []                                                                        # 储存秘密份额和签名的数组
+for i in range(threshold):                                                               # 循环输出部分签名
+    z, c = sign_partial(shares[i][1], message, a)                                        # 输出对应的签名和挑战值
+    partial_sigs.append((shares[i][0], z))                                               # 存入数组
 
 # Combining signatures
-indices = [share[0] for share in shares[:threshold]]
-combined_z = combine_signatures(partial_sigs, indices, t)
+indices = [share[0] for share in shares[:threshold]]                                     # 创建索引列表，用于拉格朗日插值
+combined_z = combine_signatures(partial_sigs, indices, t)                                # 返回完整的签名
 
 # Verification
-is_valid = verify_signature(t, message, combined_z, c, a)
+is_valid = verify_signature(t, message, combined_z, c, a)                                # 通过比较两个多项式乘积的NTT结果来验证签名的有效性。
+                                                                                         # 如果这两个结果相等（或在允许的误差范围内相等），则签名被认为是有效的。
 
 print("Is the signature valid?", is_valid)
