@@ -3,7 +3,7 @@ from array import array
 import numpy as np
 from numpy.polynomial import polynomial as poly
 from SHA256 import generate_matrix_A
-from SHA256 import generate_random_vector, function_As
+from SHA256 import generate_random_vector, function_As, add_t_s
 
 # 参数
 n = 256
@@ -263,4 +263,6 @@ print(s2)
 print('\n')
 array_As = function_As(A, s1, k, l)
 print(array_As)
+print('\n')
+print(add_t_s(array_As, s2, k, n))
 print('\n')

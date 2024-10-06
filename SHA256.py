@@ -89,3 +89,9 @@ def function_As(a, s, k, l):
 
         array_as.append(temp)
     return np.array(array_as)
+    # 乘积为k * 1的向量
+
+def add_t_s(a_s, s, k, n):
+    for i in range(k):
+        a_s[i][n - 1] = a_s[i][n - 1] + s[i]
+    return a_s
