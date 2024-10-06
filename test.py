@@ -1,7 +1,9 @@
+from array import array
+
 import numpy as np
 from numpy.polynomial import polynomial as poly
 from SHA256 import generate_matrix_A
-
+from SHA256 import generate_random_vector, function_As
 
 # 参数
 n = 256
@@ -17,7 +19,10 @@ tau = 60
 eta = 2
 
 
-k, l = 3, 5  # 你可以根据需要设置k和l的值
+seed_s1 = b'my-s1'
+seed_s2 = b'my-s2'
+
+k, l = 4, 4  # 你可以根据需要设置k和l的值
 seed = b'your-seed-here'  # 种子，必须是字节类型
 
 def ntt(a):
@@ -220,7 +225,8 @@ threshold = 3
 num_shares = 5
 
 # Key generation
-(s, a), t = generate_keypair()                                                           # 生成一个密钥对，包括秘密密钥s（一个小的多项式）和公钥a（一个随机的多项式），# 以及一个与秘密密钥相关的多项式t（通常是a和s的乘积加上一个小的误差项）。
+(s, a), t = generate_keypair()
+# 生成一个密钥对，包括秘密密钥s（一个小的多项式）和公钥a（一个随机的多项式），# 以及一个与秘密密钥相关的多项式t（通常是a和s的乘积加上一个小的误差项）。
 # 密钥s（一个小的多项式）和公钥a（一个随机的多项式），以及一个与秘密密钥相关的多项式t
 shares = generate_key_shares(t, num_shares, threshold)                                   # 输入t，参与人数，门限值，输出秘密份额
 
@@ -248,3 +254,13 @@ print("Is the signature valid?", is_valid)
 
 A = generate_matrix_A(k, l, seed, q, n)
 print(A)
+print('\n')
+s1 = generate_random_vector(seed_s1, l, eta, n)
+s2 = generate_random_vector(seed_s2, k, eta, n)
+print(s1)
+print('\n')
+print(s2)
+print('\n')
+array_As = function_As(A, s1, k, l)
+print(array_As)
+print('\n')

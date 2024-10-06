@@ -1,3 +1,5 @@
+from array import array
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 import numpy as np
@@ -6,7 +8,7 @@ import random
 # 定义参数
 q = 8380417
 n = 256
-k, l = 3, 5  # 你可以根据需要设置k和l的值
+k, l = 4, 4  # 你可以根据需要设置k和l的值
 seed = b'your-seed-here'  # 种子，必须是字节类型
 seed_s1 = b'my-s1'
 seed_s2 = b'my-s2'
@@ -15,7 +17,7 @@ eta = 2
 def mod_q(x):
     # 对输入 x 进行模 q 运算
     # 只保留实数部分
-    return np.mod(x.real.astype(np.int64), q % 400099).astype(np.int32)
+    return np.mod(x.real.astype(np.int64), q).astype(np.int32)
 
 
 # 使用SHAKE-256生成随机比特流
@@ -51,5 +53,39 @@ def generate_matrix_A(k, l, seed, q, n):
 # 生成矩阵A
 A = generate_matrix_A(k, l, seed, q, n)
 
-
 # 生成s1 s2
+
+
+def generate_random_vector(seed, dimension, eta, n):
+    length = n * 4
+    random_bytes = shake256_random_bytes(seed, length)
+    max_value = 256  # 一个字节的最大值（2^8）
+    scale_factor = eta * 2 / (max_value - 1)
+    offset = -eta
+
+    # 生成随机向量
+    random_vector = [(b // 1) * scale_factor + offset for b in random_bytes[:dimension]]
+    random_vector = [(b % 5 - 2) for b in random_bytes[:dimension]]
+
+    return np.array(random_vector)
+
+
+def function_As(a, s, k, l):
+    # 多项式矩阵与向量相乘：向量元素为常数，k * l矩阵中每个元素内的多项式的每一项乘以该常数
+    # t[n] = a[n][j] * s[j] (j from 0 to l)
+
+    t = []                     # 接收计算好的Asi
+    array_as = []
+    time = 0
+    for row in range(k):
+        for col in range(l):
+            t.append(a[row][col] * s[col])
+        temp = 0
+        for i in range(l):
+            temp = temp + t[i + row * l]
+            # print('___________________________________________________________\n',i + 1, s[i])
+            # print(temp)
+            # print('\n')
+
+        array_as.append(temp)
+    return np.array(array_as)
