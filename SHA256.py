@@ -10,7 +10,7 @@ k, l = 3, 5  # 你可以根据需要设置k和l的值
 seed = b'your-seed-here'  # 种子，必须是字节类型
 seed_s1 = b'my-s1'
 seed_s2 = b'my-s2'
-
+eta = 2
 
 def mod_q(x):
     # 对输入 x 进行模 q 运算
@@ -27,9 +27,6 @@ def shake256_random_bytes(seed_input, length):
 
 # 生成一个环R_q上的随机多项式
 def generate_polynomial(seed, q, n):
-    # 为了简单起见，我们生成一个长度为n的整数数组，每个整数在0到q-1之间
-    # 实际上，你可能需要更复杂的逻辑来确保多项式满足特定的性质（如不可约性）
-    # 但在这个例子中，我们只需要随机性
     length = n * 4  # 每个系数用4个字节表示（足够容纳q的范围）
     random_bytes = shake256_random_bytes(seed, length)
     coefficients = [int.from_bytes(random_bytes[i:i + 4], 'big') % q for i in range(0, length, 4)]
@@ -54,10 +51,5 @@ def generate_matrix_A(k, l, seed, q, n):
 # 生成矩阵A
 A = generate_matrix_A(k, l, seed, q, n)
 
-# 打印矩阵A（只打印前几行和前几个多项式以避免输出过长）
-for i in range(k):
-    for j in range(l):
-        print(f"A[{i}][{j}] = {A[i][j]}")
-        print(len(A[i][j]))
-# print('\n')
-# print(A)
+
+# 生成s1 s2
