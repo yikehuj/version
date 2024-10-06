@@ -29,7 +29,8 @@ def intt(a):
 
 def mod_q(x):
     # 对输入 x 进行模 q 运算
-    return np.mod(x.astype(np.int64), q).astype(np.int32)
+    # 只保留实数部分
+    return np.mod(x.real.astype(np.int64), q).astype(np.int32)
 
 
 '''np.mod 函数
@@ -66,9 +67,6 @@ def poly_mul_mod(a, b):
     # c_padded[:n] - c_padded[n:2 * n]：对应元素相减，这通常用于在多项式环 Z_q[x]/(x^n - 1) 中模拟乘法和约简。
     # mod_q(c_padded[:n] - c_padded[n:2 * n])中的每一个元素都是在环 Rq = ℤq[ x ] /( Xn + 1 )上的多项式
 
-    # 对应step 1:，A 中的每一个元素都是在环
-    # Rq =ℤq[ x ] /( Xn + 1 )上的多项式，其中 q = 223-213 + 1，n = 256
-
 
 def generate_keypair():
     # 生成了一对多项式系数 s 和 a，并通过多项式乘法、添加噪声和模约简等操作计算了一系列相关的值
@@ -76,8 +74,11 @@ def generate_keypair():
     # 生成一个密钥对，包括秘密密钥s（一个小的多项式）和公钥a（一个随机的多项式），以及一个与秘密密钥相关的多项式t（通常是a和s的乘积加上一个小的误差项）。
     # 公钥用于加密和验证签名，秘密密钥用于解密和生成签名。
 
-    s = np.random.randint(-eta, eta + 1, size=n, dtype=np.int32)  # 一个长度为 n 的多项式系数数组，其元素随机选取在 [-eta, eta] 范围内的整数
+    s1 = np.random.randint(-eta, eta + 1, size=n, dtype=np.int32)  # 一个长度为 n 的多项式系数数组，其元素随机选取在 [-eta, eta] 范围内的整数
+    s2 = np.random.randint(-eta, eta + 1, size=n, dtype=np.int32)
     a = np.random.randint(0, q, size=n, dtype=np.int32)  # 一个长度为 n 的多项式系数数组，其元素随机选取在 [0, q-1] 范围内的整数
+    # 对应step 1:，A 中的每一个元素都是在环
+    # Rq =ℤq[ x ] /( Xn + 1 )上的多项式，其中 q = 223-213 + 1，n = 256
     ''' np.random.randint 是 NumPy 库中的一个函数，用于生成随机整数.
         numpy.random.randint(low, high=None, size=None, dtype=int)
         low: 生成随机数的下界（包含该值）。
@@ -96,14 +97,15 @@ def generate_keypair():
     # m_q = mod_q(p_m_m_1)
     # t = m_q
 
-    t = mod_q(poly_mul_mod(a, s) + np.random.randint(-eta, eta + 1, size=n, dtype=np.int32))
-
+    t = mod_q(poly_mul_mod(a, s1) + s2)
+    # 计算向量 t = As1 + s2。  poly_mul_mod(a, s) corresponds As1
+    # np.random.randint(-eta, eta + 1, size=n, dtype=np.int32) corresponds s2
     '''mod_q(...):这是另一个假设存在的函数，通常用于执行模运算。它将输入值进行模 q 运算，确保结果在某个特定的范围内，通常是 [0, q-1]。
     这一步是为了将结果限制在特定的数值范围，常见于密码学或编码理论中。'''
     # 对应Step 3:计算向量 t = As1 + s2
 
-    return (s, a), t
-    # return s, a, p_m_m, p_m_m_1, m_q
+    return (s1, a), t
+    # 公钥 pk = (A, t)，私钥 sk = (A, t, s1, s2)。
 
 
 def generate_key_shares(t, num_shares, threshold):
@@ -265,7 +267,7 @@ shares = generate_key_shares(t, num_shares, threshold)                          
 # Signing
 message = "Hello, threshold signature!"                                                  # 要加密的消息
 partial_sigs = []                                                                        # 储存秘密份额和签名的数组
-for i in range(threshold + 1):                                                               # 循环输出部分签名
+for i in range(threshold):                                                               # 循环输出部分签名
     z, c = sign_partial(shares[i][1], message, a)                                        # 输出对应的签名和挑战值
     partial_sigs.append((shares[i][0], z))                                               # 存入数组
 
