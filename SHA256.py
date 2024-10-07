@@ -4,14 +4,17 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 import numpy as np
 import random
+import time
+
+seed_time = int(time.time())  # 使用当前时间戳作为种子
 
 # 定义参数
 q = 8380417
 n = 256
 k, l = 4, 4  # 你可以根据需要设置k和l的值
-seed = b'your-seed-here'  # 种子，必须是字节类型
-seed_s1 = b'my-s1'
-seed_s2 = b'my-s2'
+seed = b'your-seed-A-here'  # 种子，必须是字节类型
+seed_s1 = b'my-s1-seed'
+seed_s2 = b'my-s2-seed'
 eta = 2
 
 def mod_q(x):
@@ -76,7 +79,6 @@ def function_As(a, s, k, l):
 
     t = []                     # 接收计算好的Asi
     array_as = []
-    time = 0
     for row in range(k):
         for col in range(l):
             t.append(a[row][col] * s[col])
@@ -94,4 +96,4 @@ def function_As(a, s, k, l):
 def add_t_s(a_s, s, k, n):
     for i in range(k):
         a_s[i][n - 1] = a_s[i][n - 1] + s[i]
-    return a_s
+    return np.array(a_s)

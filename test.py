@@ -1,9 +1,8 @@
-from array import array
-
 import numpy as np
 from numpy.polynomial import polynomial as poly
 from SHA256 import generate_matrix_A
 from SHA256 import generate_random_vector, function_As, add_t_s
+from sign import generate_masking_vector, operation_NTT,Polynomial_A_Y
 
 # 参数
 n = 256
@@ -13,17 +12,17 @@ q = 8380417
 # Dilithium 数字签名方案中，模 q 和 n 的值是固定的，
 # 其中，n = 256，q = 223 - 213 + 1。
 
-
+y1 = 17
 d = 13
 tau = 60
 eta = 2
 
 
-seed_s1 = b'my-s1'
-seed_s2 = b'my-s2'
+seed_s1 = b'my-s1-seed'
+seed_s2 = b'my-s2-seed'
 
 k, l = 4, 4  # 你可以根据需要设置k和l的值
-seed = b'your-seed-here'  # 种子，必须是字节类型
+seed = b'your-seed-rq-here'  # 种子，必须是字节类型
 
 def ntt(a):
     # 数论变换（简化）
@@ -94,20 +93,6 @@ def generate_key_shares(t, num_shares, threshold):
     # 这里q是一个预定义的大素数，用于模运算以保证数值不会太大。n是多项式的阶数，也即秘密和份额多项式的最高次项的次数加一
     # 使用np.vstack([t, coeffs])将秘密t和随机生成的系数矩阵coeffs垂直堆叠，形成一个threshold x n的矩阵。
     # 这里的coeffs实际上是多项式的系数，其中t是常数项（秘密的多项式表示中的最低次项系数）
-    '''np.vstack:这个函数用于垂直堆叠数组。它将多个数组沿着垂直方向（行的方向）组合在一起。结果赋值：将堆叠后的结果赋值回 coeffs 变量。
-    例:
-    import numpy as np
-    t = 3
-    coeffs = np.array([1, 2, 3])
-    coeffs = np.vstack([t, coeffs])
-    print(coeffs)
-
-    输出:
-    [[3]
-     [1]
-     [2]
-     [3]]
-    这代表 t 成为了新数组的第一行，而原来的 coeffs 成为了后面的行.'''
 
     shares = []
     # 为每个参与者生成一个秘密份额
@@ -269,3 +254,10 @@ t = add_t_s(array_As, s2, k, n)
 # print('\n')
 print("公钥pk：\n",(A, t))
 print("私钥sk:\n",(A, t, s1, s2))
+print('\n')
+Y = generate_masking_vector(y1, l, n)
+print("屏蔽向量Y：\n", Y)
+print('\n')
+w = Polynomial_A_Y(A, Y, k, l)
+print("w:\n", w)
+print('\n')
